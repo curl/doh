@@ -539,21 +539,83 @@ static int doh_decode(unsigned char *doh,
   return 0; /* ok */
 }
 
-int main(int argc, char **argv)
+/* one of these for each http request */
+struct dnsprobe {
+  CURL *curl;
+  int dnstype;
+  unsigned char dohbuffer[512];
+  size_t dohlen;
+  struct response serverdoh;
+  struct data config;
+};
+
+static int initprobe(struct dnsprobe *p, int dnstype, char *host,
+                     const char *url, CURLM *multi, int trace_enabled,
+                     struct curl_slist *headers)
 {
   CURL *curl;
-  CURLcode res;
-  struct response serverdoh;
+  p->dohlen = doh_encode(host, dnstype, p->dohbuffer, sizeof(p->dohbuffer));
+  if(!p->dohlen) {
+    fprintf(stderr, "Failed to encode DOH packet\n");
+    return 2;
+  }
+
+  p->dnstype = dnstype;
+  p->serverdoh.memory = malloc(1);  /* will be grown as needed by realloc above */
+  p->serverdoh.size = 0;    /* no data at this point */
+  p->config.trace_ascii = 0; /* enable ascii tracing */
+
+  curl = curl_easy_init();
+  if(curl) {
+    if(trace_enabled) {
+      curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, my_trace);
+      curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &p->config);
+      curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&p->serverdoh);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl-doh/1.0");
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, p->dohbuffer);
+    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, p->dohlen);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
+    curl_easy_setopt(curl, CURLOPT_PRIVATE, p);
+    p->curl = curl;
+
+    /* add the individual transfers */
+    curl_multi_add_handle(multi, curl);
+  }
+  else
+    return 3;
+
+  return 0;
+}
+
+#ifdef _WIN32
+#define WAITMS(x) Sleep(x)
+#else
+/* Portable sleep for platforms other than Windows. */
+#define WAITMS(x)                               \
+  struct timeval wait = { 0, (x) * 1000 };      \
+  (void)select(0, NULL, NULL, NULL, &wait);
+#endif
+
+int main(int argc, char **argv)
+{
+  CURLMsg *msg;
   struct curl_slist *headers;
-  unsigned char dohbuffer[512];
-  size_t postlen;
-  int dnstype = DNS_TYPE_AAAA;
   int trace_enabled = 0;
-  struct data config;
   int rc;
   const char *url = "https://dns.cloudflare.com/.well-known/dns-query";
-
-  config.trace_ascii = 0; /* enable ascii tracing */
+  struct dnsprobe probe[2];
+  CURLM *multi;
+  int still_running;
+  int repeats = 0;
+  struct dnsentry d;
+  memset(&d, 0, sizeof(struct dnsentry));
+  int successful = 0;
+  int queued;
 
   if(argc < 2) {
     fprintf(stderr, "Usage: doh [host] [URL]\n");
@@ -569,80 +631,97 @@ int main(int argc, char **argv)
   headers = curl_slist_append(NULL,
                               "Content-Type: application/dns-udpwireformat");
 
-  postlen = doh_encode(argv[1], dnstype, dohbuffer, sizeof(dohbuffer));
-  if(!postlen) {
-    fprintf(stderr, "Failed to encode DOH packet\n");
-    return 2;
-  }
+  /* init a multi stack */
+  multi = curl_multi_init();
 
-  serverdoh.memory = malloc(1);  /* will be grown as needed by realloc above */
-  serverdoh.size = 0;    /* no data at this point */
+  initprobe(&probe[0], DNS_TYPE_A, argv[1], url, multi, trace_enabled, headers);
+  initprobe(&probe[1], DNS_TYPE_AAAA, argv[1], url, multi, trace_enabled, headers);
 
-  curl = curl_easy_init();
-  if(curl) {
-    if(trace_enabled) {
-      curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, my_trace);
-      curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &config);
-      curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+  /* we start some action by calling perform right away */
+  curl_multi_perform(multi, &still_running);
+
+  do {
+    CURLMcode mc; /* curl_multi_wait() return code */
+    int numfds;
+
+    /* wait for activity, timeout or "nothing" */
+    mc = curl_multi_wait(multi, NULL, 0, 1000, &numfds);
+
+    if(mc != CURLM_OK) {
+      fprintf(stderr, "curl_multi_wait() failed, code %d.\n", mc);
+      break;
     }
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&serverdoh);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, "curl-doh/1.0");
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, dohbuffer);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, (long)postlen);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
 
-    /* Perform the request, res will get the return code */
-    res = curl_easy_perform(curl);
-    /* Check for errors */
-    if(res != CURLE_OK) {
-      fprintf(stderr, "curl_easy_perform() failed: %s\n",
-              curl_easy_strerror(res));
+    /* 'numfds' being zero means either a timeout or no file descriptors to
+       wait for. Try timeout on first occurrence, then assume no file
+       descriptors and no file descriptors to wait for means wait for 100
+       milliseconds. */
+
+    if(!numfds) {
+      repeats++; /* count number of repeated zero numfds */
+      if(repeats > 1) {
+        WAITMS(10); /* sleep 10 milliseconds */
+      }
     }
-    else {
-      struct dnsentry d;
-      memset(&d, 0, sizeof(struct dnsentry));
-      /*
-       * Now, our serverdoh.memory points to a memory block that is serverdoh.size
-       * bytes big and contains the response.
-       */
-      rc = doh_decode(serverdoh.memory, serverdoh.size, dnstype, &d);
-      if(!rc) {
-        int i;
-        printf("%s from %s\n", argv[1], url);
-        for(i=0; i < d.numv4; i++) {
-          printf("A: %d.%d.%d.%d\n",
-                 d.v4addr[i]>>24,
-                 (d.v4addr[i]>>16) & 0xff,
-                 (d.v4addr[i]>>8) & 0xff,
-                 d.v4addr[i] & 0xff);
-        }
-        for(i=0; i < d.numv6; i++) {
-          int j;
-          printf("AAAA: ");
-          for(j=0; j<16; j+=2) {
-            printf("%s%02x%02x", j?":":"", d.v6addr[i].byte[j],
-                   d.v6addr[i].byte[j+1]);
-          }
-          printf("\n");
-        }
-        for(i=0; i < d.numcname; i++)
-          printf("CNAME: %s\n", d.cname[i].alloc);
+    else
+      repeats = 0;
+
+    curl_multi_perform(multi, &still_running);
+  } while(still_running);
+
+  while((msg = curl_multi_info_read(multi, &queued))) {
+    if(msg->msg == CURLMSG_DONE) {
+      struct dnsprobe *probe;
+      CURL *e = msg->easy_handle;
+      curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &probe);
+
+      /* Check for errors */
+      if(msg->data.result != CURLE_OK) {
+        fprintf(stderr, "probe for type %d failed: %s\n", probe->dnstype,
+                curl_easy_strerror(msg->data.result));
       }
       else {
-        fprintf(stderr, "doh_decode returned %d\n", rc);
+        rc = doh_decode(probe->serverdoh.memory,
+                        probe->serverdoh.size,
+                        probe->dnstype, &d);
+        if(rc) {
+          fprintf(stderr, "problem %d decoding %zd bytes response"
+                  " to probe for type %d\n", rc,
+                  probe->serverdoh.size, probe->dnstype);
+        }
+        else
+          successful++;
+        free(probe->serverdoh.memory);
       }
+      curl_multi_remove_handle(multi, e);
+      curl_easy_cleanup(e);
     }
-
-    /* always cleanup */
-    curl_easy_cleanup(curl);
-
-    free(serverdoh.memory);
-
-    /* we're done with libcurl, so clean it up */
-    curl_global_cleanup();
   }
+
+  if(successful) {
+    int i;
+    printf("%s from %s\n", argv[1], url);
+    for(i=0; i < d.numv4; i++) {
+      printf("A: %d.%d.%d.%d\n",
+             d.v4addr[i]>>24,
+             (d.v4addr[i]>>16) & 0xff,
+             (d.v4addr[i]>>8) & 0xff,
+             d.v4addr[i] & 0xff);
+    }
+    for(i=0; i < d.numv6; i++) {
+      int j;
+      printf("AAAA: ");
+      for(j=0; j<16; j+=2) {
+        printf("%s%02x%02x", j?":":"", d.v6addr[i].byte[j],
+               d.v6addr[i].byte[j+1]);
+      }
+      printf("\n");
+    }
+    for(i=0; i < d.numcname; i++)
+      printf("CNAME: %s\n", d.cname[i].alloc);
+  }
+
+  /* we're done with libcurl, so clean it up */
+  curl_global_cleanup();
   return 0;
 }

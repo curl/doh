@@ -559,6 +559,14 @@ static DOHcode doh_decode(unsigned char *doh,
   return DOH_OK; /* ok */
 }
 
+static void doh_cleanup(struct dnsentry *d)
+{
+  int i = 0;
+  for(i=0; i< d->numcname; i++) {
+    free(d->cname[i].alloc);
+  }
+}
+
 /* one of these for each http request */
 struct dnsprobe {
   CURL *curl;
@@ -740,6 +748,10 @@ int main(int argc, char **argv)
     for(i=0; i < d.numcname; i++)
       printf("CNAME: %s\n", d.cname[i].alloc);
   }
+
+  doh_cleanup(&d);
+  curl_slist_free_all(headers);
+  curl_multi_cleanup(multi);
 
   /* we're done with libcurl, so clean it up */
   curl_global_cleanup();

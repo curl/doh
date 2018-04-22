@@ -42,6 +42,21 @@
 
 #define MAX_ADDR 8
 
+typedef enum {
+  DOH_OK,
+  DOH_DNS_BAD_LABEL,
+  DOH_DNS_OUT_OF_RANGE,
+  DOH_DNS_CNAME_LOOP,
+  DOH_TOO_SMALL_BUFFER,
+  DOH_OUT_OF_MEM,
+  DOH_DNS_RDATA_LEN,
+  DOH_DNS_MALFORMAT, /* wrong size or bad ID */
+  DOH_DNS_BAD_RCODE,
+  DOH_DNS_UNEXPECTED_TYPE,
+  DOH_DNS_UNEXPECTED_CLASS,
+  DOH_NO_CONTENT,
+} DOHcode;
+
 struct data {
   char trace_ascii; /* 1 or 0 */
 };
@@ -191,7 +206,7 @@ static size_t doh_encode(const char *host,
   const char *hostp = host;
 
   if(len < (12 + hostlen + 4))
-    return 0; /* nada */
+    return DOH_TOO_SMALL_BUFFER;
 
   *dnsp++ = 0; /* 16 bit id */
   *dnsp++ = 0;
@@ -219,7 +234,7 @@ static size_t doh_encode(const char *host,
       labellen = strlen(hostp);
     if (labellen > 63)
       /* too long label, error out */
-      return 0;
+      return DOH_DNS_BAD_LABEL;
     *dnsp++ = labellen;
     memcpy(dnsp, hostp, labellen);
     dnsp += labellen;
@@ -238,28 +253,28 @@ static size_t doh_encode(const char *host,
   return dnsp - orig;
 }
 
-static int skipqname(unsigned char *doh, size_t dohlen,
-                     unsigned int *indexp)
+static DOHcode skipqname(unsigned char *doh, size_t dohlen,
+                         unsigned int *indexp)
 {
   unsigned char length;
   do {
     if (dohlen < (*indexp + 1))
-      return 1; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
     length = doh[*indexp];
     if ((length & 0xc0) == 0xc0) {
       /* name pointer, advance over it and be done */
       if (dohlen < (*indexp + 2))
-        return 1; /* out of range */
+        return DOH_DNS_OUT_OF_RANGE;
       *indexp += 2;
       break;
     }
     if (length & 0xc0)
-      return 2; /* illegal length! */
+      return DOH_DNS_BAD_LABEL;
     if (dohlen < (*indexp + 1 + length))
-      return 1; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
     *indexp += 1 + length;
   } while (length);
-  return 0;
+  return DOH_OK;
 }
 
 static unsigned short get16bit(unsigned char *doh, int index)
@@ -273,33 +288,39 @@ static unsigned int get32bit(unsigned char *doh, int index)
     (doh[index+2] << 8) | doh[index+3];
 }
 
-static int store_a(unsigned char *doh,
-                   int index,
-                   struct dnsentry *d)
+static DOHcode store_a(unsigned char *doh,
+                       int index,
+                       struct dnsentry *d)
 {
-  unsigned int *inetp = &d->v4addr[d->numv4++];
-  *inetp = get32bit(doh, index);
-  return 0;
+  /* this function silently ignore address over the limit */
+  if(d->numv4 < MAX_ADDR) {
+    unsigned int *inetp = &d->v4addr[d->numv4++];
+    *inetp = get32bit(doh, index);
+  }
+  return DOH_OK;
 }
 
-static int store_aaaa(unsigned char *doh,
-                      int index,
-                      struct dnsentry *d)
+static DOHcode store_aaaa(unsigned char *doh,
+                          int index,
+                          struct dnsentry *d)
 {
-  struct addr6 *inet6p = &d->v6addr[d->numv6++];
-  memcpy(inet6p, &doh[index], 16);
-  return 0;
+  /* this function silently ignore address over the limit */
+  if(d->numv6 < MAX_ADDR) {
+    struct addr6 *inet6p = &d->v6addr[d->numv6++];
+    memcpy(inet6p, &doh[index], 16);
+  }
+  return DOH_OK;
 }
 
-static int cnameappend(struct cnamestore *c,
-                       unsigned char *src,
-                       size_t len)
+static DOHcode cnameappend(struct cnamestore *c,
+                           unsigned char *src,
+                           size_t len)
 {
   if(!c->alloc) {
     c->allocsize = len + 1;
     c->alloc = malloc(c->allocsize);
     if(!c->alloc)
-      return 5; /* out of memory */
+      return DOH_OUT_OF_MEM;
   }
   else if(c->allocsize < (c->allocsize + len + 1)) {
     char *ptr;
@@ -307,33 +328,33 @@ static int cnameappend(struct cnamestore *c,
     ptr = realloc(c->alloc, c->allocsize);
     if(!ptr) {
       free(c->alloc);
-      return 5; /* out of memory */
+      return DOH_OUT_OF_MEM;
     }
     c->alloc = ptr;
   }
   memcpy(&c->alloc[c->len], src, len);
   c->len += len;
   c->alloc[c->len]=0; /* keep it zero terminated */
-  return 0;
+  return DOH_OK;
 }
 
-static int store_cname(unsigned char *doh,
-                       size_t dohlen,
-                       unsigned int index,
-                       struct dnsentry *d)
+static DOHcode store_cname(unsigned char *doh,
+                           size_t dohlen,
+                           unsigned int index,
+                           struct dnsentry *d)
 {
   struct cnamestore *c = &d->cname[d->numcname++];
   unsigned int loop = 128; /* a valid DNS name can never loop this much */
   unsigned char length;
   do {
     if (index >= dohlen)
-      return 1;
+      return DOH_DNS_OUT_OF_RANGE;
     length = doh[index];
     if ((length & 0xc0) == 0xc0) {
       unsigned short newpos;
       /* name pointer, get the new offset (14 bits) */
       if ((index +1) >= dohlen)
-        return 1;
+        return DOH_DNS_OUT_OF_RANGE;
 
       /* move to the the new index */
       newpos = (length & 0x3f) << 8 | doh[index+1];
@@ -341,78 +362,76 @@ static int store_cname(unsigned char *doh,
       continue;
     }
     else if (length & 0xc0)
-      return 2; /* bad input */
+      return DOH_DNS_BAD_LABEL; /* bad input */
     else
       index++;
 
     if (length) {
-      int rc;
+      DOHcode rc;
       if (c->len) {
         rc = cnameappend(c, (unsigned char *)".", 1);
         if(rc)
-          return 3;
+          return rc;
       }
       if ((index + length) > dohlen)
-        return 1;
+        return DOH_DNS_BAD_LABEL;
 
       rc = cnameappend(c, &doh[index], length);
       if(rc)
-        return 3;
+        return rc;
       index += length;
     }
   } while (length && --loop);
 
   if (!loop)
-    return 6;
-  return 0;
+    return DOH_DNS_CNAME_LOOP;
+  return DOH_OK;
 }
 
-static int rdata(unsigned char *doh,
-                 size_t dohlen,
-                 unsigned short rdlength,
-                 unsigned short type,
-                 int index,
-                 struct dnsentry *d)
+static DOHcode rdata(unsigned char *doh,
+                     size_t dohlen,
+                     unsigned short rdlength,
+                     unsigned short type,
+                     int index,
+                     struct dnsentry *d)
 {
   /* RDATA
      - A (TYPE 1):  4 bytes
      - AAAA (TYPE 28): 16 bytes
      - NS (TYPE 2): N bytes */
-  int rc;
+  DOHcode rc;
 
   switch(type) {
   case DNS_TYPE_A:
     if(rdlength != 4)
-      return 2;
+      return DOH_DNS_RDATA_LEN;
     rc = store_a(doh, index, d);
     if(rc)
-      return 2;
+      return rc;
     break;
   case DNS_TYPE_AAAA:
     if (rdlength != 16)
-      return 2;
+      return DOH_DNS_RDATA_LEN;
     rc = store_aaaa(doh, index, d);
     if(rc)
-      return 2;
-    break;
-  case DNS_TYPE_NS:
+      return rc;
     break;
   case DNS_TYPE_CNAME:
     rc = store_cname(doh, dohlen, index, d);
     if(rc)
-      return 2;
+      return rc;
     break;
   default:
-    /* unsupported type */
+    /* unsupported type, just skip it */
     break;
   }
-  return 0;
+  return DOH_OK;
 }
 
-static int doh_decode(unsigned char *doh,
-                      size_t dohlen,
-                      int dnstype,
-                      struct dnsentry *d)
+static DOHcode doh_decode(unsigned char *doh,
+                          size_t dohlen,
+                          int dnstype,
+                          struct dnsentry *d)
 {
   unsigned char rcode;
   unsigned short qdcount;
@@ -423,99 +442,100 @@ static int doh_decode(unsigned char *doh,
   unsigned short nscount;
   unsigned short arcount;
   unsigned int index = 12;
+  DOHcode rc;
 
   if(dohlen < 12 || doh[0] || doh[1])
-    return 1; /* too small or bad ID */
+    return DOH_DNS_MALFORMAT; /* too small or bad ID */
   rcode = doh[3] & 0x0f;
   if(rcode)
-    return 2; /* bad rcode */
+    return DOH_DNS_BAD_RCODE; /* bad rcode */
 
   qdcount = get16bit(doh, 4);
   while (qdcount) {
-    int rc = skipqname(doh, dohlen, &index);
+    rc = skipqname(doh, dohlen, &index);
     if(rc)
-      return 3; /* bad qname */
+      return rc; /* bad qname */
     if (dohlen < (index + 4))
-      return 4; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
     index += 4; /* skip question's type and class */
     qdcount--;
   }
 
   ancount = get16bit(doh, 6);
   while (ancount) {
-    int rc = skipqname(doh, dohlen, &index);
+    rc = skipqname(doh, dohlen, &index);
     if(rc)
-      return 3; /* bad qname */
+      return rc; /* bad qname */
 
     if (dohlen < (index + 2))
-      return 1; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
 
     type = get16bit(doh, index);
     if ((type != DNS_TYPE_CNAME) && (type != dnstype))
       /* Not the same type as was asked for nor CNAME */
-      return 4; /* unexpected response */
+      return DOH_DNS_UNEXPECTED_TYPE;
     index += 2;
 
     if (dohlen < (index + 2))
-      return 1; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
     class = get16bit(doh, index);
     if (DNS_CLASS_IN != class)
-      return 5; /* unsupported */
+      return DOH_DNS_UNEXPECTED_CLASS; /* unsupported */
     index += 2;
 
     if (dohlen < (index + 4))
-      return 1; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
 
     d->ttl = get32bit(doh, index);
     index += 4;
 
     if (dohlen < (index + 2))
-      return 1; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
 
     rdlength = get16bit(doh, index);
     index += 2;
     if(dohlen < (index + rdlength))
-      return 1; /* out of range */
+      return DOH_DNS_OUT_OF_RANGE;
 
     rc = rdata(doh, dohlen, rdlength, type, index, d);
     if(rc)
-      return 2; /* bad rdata */
+      return rc; /* bad rdata */
     index += rdlength;
     ancount--;
   }
 
   nscount = get16bit(doh, 8);
   while (nscount) {
-    int rc = skipqname(doh, dohlen, &index);
+    rc = skipqname(doh, dohlen, &index);
     if(rc)
-      return 3; /* bad qname */
+      return rc; /* bad qname */
 
     if (dohlen < (index + 8))
-      return 1;
+      return DOH_DNS_OUT_OF_RANGE;
 
     index += 2; /* type */
     index += 2; /* class */
     index += 4; /* ttl */
 
     if (dohlen < (index + 2))
-      return 1;
+      return DOH_DNS_OUT_OF_RANGE;
 
     rdlength = get16bit(doh, index);
     index += 2;
     if (dohlen < (index + rdlength))
-      return 1;
+      return DOH_DNS_OUT_OF_RANGE;
     index += rdlength;
     nscount--;
   }
 
   arcount = get16bit(doh, 10);
   while (arcount) {
-    int rc = skipqname(doh, dohlen, &index);
+    rc = skipqname(doh, dohlen, &index);
     if(rc)
-      return 3; /* bad qname */
+      return rc; /* bad qname */
 
     if (dohlen < (index + 8))
-      return 1;
+      return DOH_DNS_OUT_OF_RANGE;
 
     index += 2; /* type */
     index += 2; /* class */
@@ -524,19 +544,19 @@ static int doh_decode(unsigned char *doh,
     rdlength = get16bit(doh, index);
     index += 2;
     if (dohlen < (index + rdlength))
-      return 1;
+      return DOH_DNS_OUT_OF_RANGE;
     index += rdlength;
     arcount--;
   }
 
   if (index != dohlen)
-    return 7; /* something is wrong */
+    return DOH_DNS_MALFORMAT; /* something is wrong */
 
   if ((type != DNS_TYPE_NS) && !d->numcname && !d->numv6 && !d->numv4)
     /* nothing stored! */
-    return 8;
+    return DOH_NO_CONTENT;
 
-  return 0; /* ok */
+  return DOH_OK; /* ok */
 }
 
 /* one of these for each http request */

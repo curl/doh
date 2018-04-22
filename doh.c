@@ -671,6 +671,7 @@ int main(int argc, char **argv)
   /* init a multi stack */
   multi = curl_multi_init();
 
+  doh_init(&d);
   initprobe(&probe[0], DNS_TYPE_A, argv[1], url, multi, trace_enabled, headers);
   initprobe(&probe[1], DNS_TYPE_AAAA, argv[1], url, multi, trace_enabled, headers);
 
@@ -717,7 +718,6 @@ int main(int argc, char **argv)
                   curl_easy_strerror(msg->data.result));
         }
         else {
-          doh_init(&d);
           rc = doh_decode(probe->serverdoh.memory,
                           probe->serverdoh.size,
                           probe->dnstype, &d);

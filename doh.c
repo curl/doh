@@ -463,6 +463,8 @@ static DOHcode doh_decode(unsigned char *doh,
 
   ancount = get16bit(doh, 6);
   while (ancount) {
+    unsigned int ttl;
+
     rc = skipqname(doh, dohlen, &index);
     if(rc)
       return rc; /* bad qname */
@@ -486,7 +488,9 @@ static DOHcode doh_decode(unsigned char *doh,
     if (dohlen < (index + 4))
       return DOH_DNS_OUT_OF_RANGE;
 
-    d->ttl = get32bit(doh, index);
+    ttl = get32bit(doh, index);
+    if(ttl < d->ttl)
+      d->ttl = ttl;
     index += 4;
 
     if (dohlen < (index + 2))
@@ -557,6 +561,12 @@ static DOHcode doh_decode(unsigned char *doh,
     return DOH_NO_CONTENT;
 
   return DOH_OK; /* ok */
+}
+
+static void doh_init(struct dnsentry *d)
+{
+  memset(d, 0, sizeof(struct dnsentry));
+  d->ttl = ~0; /* default to max */
 }
 
 static void doh_cleanup(struct dnsentry *d)
@@ -641,7 +651,6 @@ int main(int argc, char **argv)
   int still_running;
   int repeats = 0;
   struct dnsentry d;
-  memset(&d, 0, sizeof(struct dnsentry));
   int successful = 0;
   int queued;
 
@@ -708,6 +717,7 @@ int main(int argc, char **argv)
                   curl_easy_strerror(msg->data.result));
         }
         else {
+          doh_init(&d);
           rc = doh_decode(probe->serverdoh.memory,
                           probe->serverdoh.size,
                           probe->dnstype, &d);
@@ -729,6 +739,7 @@ int main(int argc, char **argv)
   if(successful) {
     int i;
     printf("%s from %s\n", argv[1], url);
+    printf("TTL: %u seconds\n", d.ttl);
     for(i=0; i < d.numv4; i++) {
       printf("A: %d.%d.%d.%d\n",
              d.v4addr[i]>>24,

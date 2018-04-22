@@ -687,36 +687,36 @@ int main(int argc, char **argv)
       repeats = 0;
 
     curl_multi_perform(multi, &still_running);
-  } while(still_running);
 
-  while((msg = curl_multi_info_read(multi, &queued))) {
-    if(msg->msg == CURLMSG_DONE) {
-      struct dnsprobe *probe;
-      CURL *e = msg->easy_handle;
-      curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &probe);
+    while((msg = curl_multi_info_read(multi, &queued))) {
+      if(msg->msg == CURLMSG_DONE) {
+        struct dnsprobe *probe;
+        CURL *e = msg->easy_handle;
+        curl_easy_getinfo(msg->easy_handle, CURLINFO_PRIVATE, &probe);
 
-      /* Check for errors */
-      if(msg->data.result != CURLE_OK) {
-        fprintf(stderr, "probe for type %d failed: %s\n", probe->dnstype,
-                curl_easy_strerror(msg->data.result));
-      }
-      else {
-        rc = doh_decode(probe->serverdoh.memory,
-                        probe->serverdoh.size,
-                        probe->dnstype, &d);
-        if(rc) {
-          fprintf(stderr, "problem %d decoding %zd bytes response"
-                  " to probe for type %d\n", rc,
-                  probe->serverdoh.size, probe->dnstype);
+        /* Check for errors */
+        if(msg->data.result != CURLE_OK) {
+          fprintf(stderr, "probe for type %d failed: %s\n", probe->dnstype,
+                  curl_easy_strerror(msg->data.result));
         }
-        else
-          successful++;
-        free(probe->serverdoh.memory);
+        else {
+          rc = doh_decode(probe->serverdoh.memory,
+                          probe->serverdoh.size,
+                          probe->dnstype, &d);
+          if(rc) {
+            fprintf(stderr, "problem %d decoding %zd bytes response"
+                    " to probe for type %d\n", rc,
+                    probe->serverdoh.size, probe->dnstype);
+          }
+          else
+            successful++;
+          free(probe->serverdoh.memory);
+        }
+        curl_multi_remove_handle(multi, e);
+        curl_easy_cleanup(e);
       }
-      curl_multi_remove_handle(multi, e);
-      curl_easy_cleanup(e);
     }
-  }
+  } while(still_running);
 
   if(successful) {
     int i;

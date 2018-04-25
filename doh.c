@@ -436,7 +436,7 @@ static DOHcode doh_decode(unsigned char *doh,
   unsigned char rcode;
   unsigned short qdcount;
   unsigned short ancount;
-  unsigned short type;
+  unsigned short type=0;
   unsigned short class;
   unsigned short rdlength;
   unsigned short nscount;

@@ -44,17 +44,17 @@
 
 typedef enum {
   DOH_OK,
-  DOH_DNS_BAD_LABEL,
-  DOH_DNS_OUT_OF_RANGE,
-  DOH_DNS_CNAME_LOOP,
-  DOH_TOO_SMALL_BUFFER,
-  DOH_OUT_OF_MEM,
-  DOH_DNS_RDATA_LEN,
-  DOH_DNS_MALFORMAT, /* wrong size or bad ID */
-  DOH_DNS_BAD_RCODE,
-  DOH_DNS_UNEXPECTED_TYPE,
-  DOH_DNS_UNEXPECTED_CLASS,
-  DOH_NO_CONTENT,
+  DOH_DNS_BAD_LABEL,    /* 1 */
+  DOH_DNS_OUT_OF_RANGE, /* 2 */
+  DOH_DNS_CNAME_LOOP,   /* 3 */
+  DOH_TOO_SMALL_BUFFER, /* 4 */
+  DOH_OUT_OF_MEM,       /* 5 */
+  DOH_DNS_RDATA_LEN,    /* 6 */
+  DOH_DNS_MALFORMAT,    /* 7 - wrong size or bad ID */
+  DOH_DNS_BAD_RCODE,    /* 8 */
+  DOH_DNS_UNEXPECTED_TYPE,  /* 9 */
+  DOH_DNS_UNEXPECTED_CLASS, /* 10 */
+  DOH_NO_CONTENT,           /* 11 */
 } DOHcode;
 
 struct data {
@@ -639,6 +639,15 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
   (void)select(0, NULL, NULL, NULL, &wait);
 #endif
 
+static void help(void)
+{
+  fprintf(stderr,
+          "Usage: doh [options] <host> [URL]\n"
+          "  -h  this help\n"
+          "  -v  verbose mode\n");
+  exit(0);
+}
+
 int main(int argc, char **argv)
 {
   CURLMsg *msg;
@@ -646,6 +655,7 @@ int main(int argc, char **argv)
   int trace_enabled = 0;
   int rc;
   const char *url = "https://dns.cloudflare.com/.well-known/dns-query";
+  char *host;
   struct dnsprobe probe[2];
   CURLM *multi;
   int still_running;
@@ -653,14 +663,30 @@ int main(int argc, char **argv)
   struct dnsentry d;
   int successful = 0;
   int queued;
+  int url_argc = 1;
 
-  if(argc < 2) {
-    fprintf(stderr, "Usage: doh [host] [URL]\n");
-    return 1;
+  if(argc > 1) {
+    char *opts = argv[1];
+    if(opts[0] == '-') {
+      do {
+        opts++;
+        switch(*opts) {
+        case 'v':
+          trace_enabled = 1;
+          break;
+        case 'h':
+          help();
+          break;
+        }
+      } while(*opts);
+      url_argc++;
+    }
   }
-  else if(argc > 2) {
-    url = argv[2];
-  }
+  else
+    help();
+  host = argv[url_argc];
+  if(argc > 1 + url_argc)
+    url = argv[url_argc + 1];
 
   curl_global_init(CURL_GLOBAL_ALL);
 
@@ -672,8 +698,8 @@ int main(int argc, char **argv)
   multi = curl_multi_init();
 
   doh_init(&d);
-  initprobe(&probe[0], DNS_TYPE_A, argv[1], url, multi, trace_enabled, headers);
-  initprobe(&probe[1], DNS_TYPE_AAAA, argv[1], url, multi, trace_enabled, headers);
+  initprobe(&probe[0], DNS_TYPE_A, host, url, multi, trace_enabled, headers);
+  initprobe(&probe[1], DNS_TYPE_AAAA, host, url, multi, trace_enabled, headers);
 
   /* we start some action by calling perform right away */
   curl_multi_perform(multi, &still_running);
@@ -718,16 +744,24 @@ int main(int argc, char **argv)
                   curl_easy_strerror(msg->data.result));
         }
         else {
-          rc = doh_decode(probe->serverdoh.memory,
-                          probe->serverdoh.size,
-                          probe->dnstype, &d);
-          if(rc) {
-            fprintf(stderr, "problem %d decoding %zd bytes response"
-                    " to probe for type %d\n", rc,
-                    probe->serverdoh.size, probe->dnstype);
+          long response_code;
+          curl_easy_getinfo(e, CURLINFO_RESPONSE_CODE, &response_code);
+          if((response_code / 100 ) == 2) {
+            rc = doh_decode(probe->serverdoh.memory,
+                            probe->serverdoh.size,
+                            probe->dnstype, &d);
+            if(rc) {
+              fprintf(stderr, "problem %d decoding %zd bytes response"
+                      " to probe for type %d\n", rc,
+                      probe->serverdoh.size, probe->dnstype);
+            }
+            else
+              successful++;
           }
-          else
-            successful++;
+          else {
+            fprintf(stderr, "Probe for type %d got response: %03ld\n",
+                    probe->dnstype, response_code);
+          }
           free(probe->serverdoh.memory);
         }
         curl_multi_remove_handle(multi, e);
@@ -738,7 +772,7 @@ int main(int argc, char **argv)
 
   if(successful) {
     int i;
-    printf("%s from %s\n", argv[1], url);
+    printf("%s from %s\n", host, url);
     printf("TTL: %u seconds\n", d.ttl);
     for(i=0; i < d.numv4; i++) {
       printf("A: %d.%d.%d.%d\n",

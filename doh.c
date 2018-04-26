@@ -51,7 +51,7 @@ typedef enum {
   DOH_OUT_OF_MEM,       /* 5 */
   DOH_DNS_RDATA_LEN,    /* 6 */
   DOH_DNS_MALFORMAT,    /* 7 - wrong size or bad ID */
-  DOH_DNS_BAD_RCODE,    /* 8 */
+  DOH_DNS_BAD_RCODE,    /* 8 - no such name */
   DOH_DNS_UNEXPECTED_TYPE,  /* 9 */
   DOH_DNS_UNEXPECTED_CLASS, /* 10 */
   DOH_NO_CONTENT,           /* 11 */
@@ -176,6 +176,11 @@ struct dnsentry {
   int numcname;
   struct cnamestore cname[MAX_ADDR];
 };
+
+static const char *type2name(int dnstype)
+{
+  return (dnstype == 1)?"A":"AAAA";
+}
 
 static size_t
 write_cb(void *contents, size_t size, size_t nmemb, void *userp)
@@ -740,7 +745,7 @@ int main(int argc, char **argv)
 
         /* Check for errors */
         if(msg->data.result != CURLE_OK) {
-          fprintf(stderr, "probe for type %d failed: %s\n", probe->dnstype,
+          fprintf(stderr, "probe for %s failed: %s\n", type2name(probe->dnstype),
                   curl_easy_strerror(msg->data.result));
         }
         else {
@@ -751,16 +756,22 @@ int main(int argc, char **argv)
                             probe->serverdoh.size,
                             probe->dnstype, &d);
             if(rc) {
-              fprintf(stderr, "problem %d decoding %zd bytes response"
-                      " to probe for type %d\n", rc,
-                      probe->serverdoh.size, probe->dnstype);
+              if(rc == DOH_DNS_BAD_RCODE) {
+                fprintf(stderr, "Host %s not found for %s\n",
+                        host, type2name(probe->dnstype));
+              }
+              else {
+                fprintf(stderr, "problem %d decoding %zd bytes response"
+                        " to probe for %s\n", rc,
+                        probe->serverdoh.size, type2name(probe->dnstype));
+              }
             }
             else
               successful++;
           }
           else {
-            fprintf(stderr, "Probe for type %d got response: %03ld\n",
-                    probe->dnstype, response_code);
+            fprintf(stderr, "Probe for %s got response: %03ld\n",
+                    type2name(probe->dnstype), response_code);
           }
           free(probe->serverdoh.memory);
         }

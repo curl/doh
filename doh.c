@@ -26,12 +26,36 @@
  * Timeout slow respones.
  *
  */
+
+#ifdef _WIN32
+#include <winsock2.h>
+#endif
+
+#if defined(_MSC_VER) && (_MSC_VER < 1800)
+typedef enum {
+  bool_false = 0,
+  bool_true  = 1
+} bool;
+#define false bool_false
+#define true  bool_true
+#else
+#include <stdbool.h>
+#endif
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdbool.h>
 #include <curl/curl.h>
+
+#ifndef _WIN32
 #include <netinet/in.h>
+#endif
+
+#ifdef _WIN32
+#define FMT_SIZE_T "Iu"
+#else
+#define FMT_SIZE_T "zu"
+#endif
 
 #define DNS_CLASS_IN 0x01
 
@@ -240,7 +264,7 @@ static size_t doh_encode(const char *host,
     if (labellen > 63)
       /* too long label, error out */
       return DOH_DNS_BAD_LABEL;
-    *dnsp++ = labellen;
+    *dnsp++ = (unsigned char)labellen;
     memcpy(dnsp, hostp, labellen);
     dnsp += labellen;
     hostp += labellen + 1;
@@ -251,7 +275,7 @@ static size_t doh_encode(const char *host,
   } while(1);
 
   *dnsp++ = '\0'; /* upper 8 bit TYPE */
-  *dnsp++ = dnstype;
+  *dnsp++ = (unsigned char)dnstype;
   *dnsp++ = '\0'; /* upper 8 bit CLASS */
   *dnsp++ = DNS_CLASS_IN; /* IN - "the Internet" */
 
@@ -571,7 +595,7 @@ static DOHcode doh_decode(unsigned char *doh,
 static void doh_init(struct dnsentry *d)
 {
   memset(d, 0, sizeof(struct dnsentry));
-  d->ttl = ~0; /* default to max */
+  d->ttl = ~0u; /* default to max */
 }
 
 static void doh_cleanup(struct dnsentry *d)
@@ -610,6 +634,21 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
 
   curl = curl_easy_init();
   if(curl) {
+#ifdef _WIN32
+    /* Search and set the CA certificate bundle in the path. */
+    struct curl_tlssessioninfo *tls_backend_info = NULL;
+    curl_easy_getinfo(curl, CURLINFO_TLS_SSL_PTR, &tls_backend_info);
+
+    if(tls_backend_info->backend != CURLSSLBACKEND_SCHANNEL) {
+      char *u = NULL;
+      char buf[MAX_PATH] = { 0, };
+
+      if(SearchPathA(NULL, "curl-ca-bundle.crt", NULL, sizeof buf, buf, &u)) {
+        curl_easy_setopt(curl, CURLOPT_CAINFO, buf);
+        curl_easy_setopt(curl, CURLOPT_PROXY_CAINFO, buf);
+      }
+    }
+#endif
     if(trace_enabled) {
       curl_easy_setopt(curl, CURLOPT_DEBUGFUNCTION, my_trace);
       curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &p->config);
@@ -761,9 +800,9 @@ int main(int argc, char **argv)
                         host, type2name(probe->dnstype));
               }
               else {
-                fprintf(stderr, "problem %d decoding %zd bytes response"
-                        " to probe for %s\n", rc,
-                        probe->serverdoh.size, type2name(probe->dnstype));
+                fprintf(stderr, "problem %d decoding %" FMT_SIZE_T
+                        " bytes response to probe for %s\n",
+                        rc, probe->serverdoh.size, type2name(probe->dnstype));
               }
             }
             else

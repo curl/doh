@@ -1,6 +1,6 @@
 TARGET = doh
 OBJS = doh.o
-LDFLAGS = -lcurl
+LDLIBS = -lcurl
 CFLAGS = -W -Wall -pedantic -g
 
 $(TARGET): $(OBJS)

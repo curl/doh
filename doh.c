@@ -736,7 +736,7 @@ int main(int argc, char **argv)
 
   /* use the older content-type */
   headers = curl_slist_append(NULL,
-                              "Content-Type: application/dns-udpwireformat");
+                              "Content-Type: application/dns-message");
 
   /* init a multi stack */
   multi = curl_multi_init();

@@ -663,6 +663,7 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
     curl_easy_setopt(curl, CURLOPT_PRIVATE, p);
+    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     p->curl = curl;
 
     /* add the individual transfers */
@@ -698,7 +699,7 @@ int main(int argc, char **argv)
   struct curl_slist *headers;
   int trace_enabled = 0;
   int rc;
-  const char *url = "https://dns.cloudflare.com/.well-known/dns-query";
+  const char *url = "https://dns.cloudflare.com/dns-query";
   char *host;
   struct dnsprobe probe[2];
   CURLM *multi;

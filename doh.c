@@ -836,7 +836,7 @@ int main(int argc, char **argv)
       int j;
       printf("AAAA: ");
       for(j=0; j<16; j+=2) {
-        printf("%s%02x%02x", j?":":"", d.v6addr[i].byte[j],
+        printf("%s%02x%02x", j ? ":" : "", d.v6addr[i].byte[j],
                d.v6addr[i].byte[j+1]);
       }
       printf("\n");

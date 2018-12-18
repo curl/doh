@@ -1,0 +1,29 @@
+name: doh
+version: '6d653c0+git' # just for humans, typically '1.2+git' or '1.3.2'
+summary: libcurl-using application that does DOH (DNS-over-HTTPS) requests
+description: |
+  A libcurl-using application that resolves a host name 
+  using DNS-over-HTTPS (DOH).
+  This code uses POST requests unconditionally for this.
+
+grade: stable
+confinement: strict
+
+apps:
+  doh:
+    command: doh
+    plugs: [network]
+
+parts:
+  doh:
+    source: https://github.com/curl/doh.git
+    plugin: make
+    build-packages:
+      - build-essential
+      - libcurl4-openssl-dev
+    stage-packages:
+      - libcurl3
+      - libkrb5-3
+      - libsasl2-2
+    artifacts:
+      - doh

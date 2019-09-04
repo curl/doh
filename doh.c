@@ -462,6 +462,7 @@ static DOHcode doh_decode(unsigned char *doh,
                           int dnstype,
                           struct dnsentry *d)
 {
+  unsigned char qr;
   unsigned char rcode;
   unsigned short qdcount;
   unsigned short ancount;
@@ -473,8 +474,9 @@ static DOHcode doh_decode(unsigned char *doh,
   unsigned int index = 12;
   DOHcode rc;
 
-  if(dohlen < 12 || doh[0] || doh[1])
-    return DOH_DNS_MALFORMAT; /* too small or bad ID */
+  qr = doh[2] & 0x80;
+  if(dohlen < 12 || doh[0] || doh[1] || !qr)
+    return DOH_DNS_MALFORMAT; /* too small or bad ID or not a response */
   rcode = doh[3] & 0x0f;
   if(rcode)
     return DOH_DNS_BAD_RCODE; /* bad rcode */
@@ -689,8 +691,9 @@ static void help(void)
   fprintf(stderr,
           "Usage: doh [options] <host> [URL]\n"
           "  -h  this help\n"
+          "  -t  test mode\n"
           "  -v  verbose mode\n");
-  exit(0);
+  exit(1);
 }
 
 int main(int argc, char **argv)
@@ -698,6 +701,7 @@ int main(int argc, char **argv)
   CURLMsg *msg;
   struct curl_slist *headers;
   int trace_enabled = 0;
+  int test_mode = 0;
   int rc;
   const char *url = "https://dns.cloudflare.com/dns-query";
   char *host;
@@ -707,6 +711,7 @@ int main(int argc, char **argv)
   int repeats = 0;
   struct dnsentry d;
   int successful = 0;
+  int exit_status = 0;
   int queued;
   int url_argc = 1;
 
@@ -718,6 +723,9 @@ int main(int argc, char **argv)
         switch(*opts) {
         case 'v':
           trace_enabled = 1;
+          break;
+        case 't':
+          test_mode = 1;
           break;
         case 'h':
           help();
@@ -745,12 +753,15 @@ int main(int argc, char **argv)
   multi = curl_multi_init();
 
   doh_init(&d);
-  initprobe(&probe[0], DNS_TYPE_A, host, url, multi, trace_enabled, headers);
+  if(!test_mode) {
+    initprobe(&probe[0], DNS_TYPE_A, host, url, multi, trace_enabled, headers);
+  }
   initprobe(&probe[1], DNS_TYPE_AAAA, host, url, multi, trace_enabled, headers);
 
   /* we start some action by calling perform right away */
   curl_multi_perform(multi, &still_running);
 
+  exit_status = 0;
   do {
     CURLMcode mc; /* curl_multi_wait() return code */
     int numfds;
@@ -789,6 +800,7 @@ int main(int argc, char **argv)
         if(msg->data.result != CURLE_OK) {
           fprintf(stderr, "probe for %s failed: %s\n", type2name(probe->dnstype),
                   curl_easy_strerror(msg->data.result));
+          exit_status = 1;
         }
         else {
           long response_code;
@@ -799,13 +811,13 @@ int main(int argc, char **argv)
                             probe->dnstype, &d);
             if(rc) {
               if(rc == DOH_DNS_BAD_RCODE) {
-                fprintf(stderr, "Host %s not found for %s\n",
+                fprintf(stderr, "Bad rcode, %s (%s)\n",
                         host, type2name(probe->dnstype));
-              }
-              else {
+              } else if(rc != DOH_NO_CONTENT) {
                 fprintf(stderr, "problem %d decoding %" FMT_SIZE_T
                         " bytes response to probe for %s\n",
                         rc, probe->serverdoh.size, type2name(probe->dnstype));
+                exit_status = 1;
               }
             }
             else
@@ -823,7 +835,7 @@ int main(int argc, char **argv)
     }
   } while(still_running);
 
-  if(successful) {
+  if(successful && !test_mode) {
     int i;
     printf("%s from %s\n", host, url);
     printf("TTL: %u seconds\n", d.ttl);
@@ -853,5 +865,5 @@ int main(int argc, char **argv)
 
   /* we're done with libcurl, so clean it up */
   curl_global_cleanup();
-  return 0;
+  return exit_status;
 }

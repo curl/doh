@@ -1,7 +1,7 @@
 TARGET = doh
 OBJS = doh.o
-LDLIBS = -lcurl
-CFLAGS = -W -Wall -pedantic -g
+LDLIBS = `curl-config --libs`
+CFLAGS = -W -Wall -pedantic -g `curl-config --cflags`
 
 $(TARGET): $(OBJS)
 

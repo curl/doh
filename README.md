@@ -16,6 +16,7 @@ servers](https://github.com/curl/curl/wiki/DNS-over-HTTPS#publicly-available-ser
 Options:
 
 - `-h` shows help output
+- `-t` enables server test mode
 - `-v` enables verbose mode
 
 ## Examples

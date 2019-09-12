@@ -620,7 +620,7 @@ struct dnsprobe {
 
 static int initprobe(struct dnsprobe *p, int dnstype, char *host,
                      const char *url, CURLM *multi, int trace_enabled,
-                     struct curl_slist *headers)
+                     struct curl_slist *headers, long insecure_mode)
 {
   CURL *curl;
   p->dohlen = doh_encode(host, dnstype, p->dohbuffer, sizeof(p->dohbuffer));
@@ -666,6 +666,8 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
     curl_easy_setopt(curl, CURLOPT_PRIVATE, p);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, insecure_mode);
+
     p->curl = curl;
 
     /* add the individual transfers */
@@ -692,7 +694,8 @@ static void help(void)
           "Usage: doh [options] <host> [URL]\n"
           "  -h  this help\n"
           "  -t  test mode\n"
-          "  -v  verbose mode\n");
+          "  -v  verbose mode\n"
+          "  -i  insecure mode - don't validate TLS certificate\n" );
   exit(1);
 }
 
@@ -714,6 +717,7 @@ int main(int argc, char **argv)
   int exit_status = 0;
   int queued;
   int url_argc = 1;
+  long insecure_mode = 1L;
 
   if(argc > 1) {
     char *opts = argv[1];
@@ -726,6 +730,9 @@ int main(int argc, char **argv)
           break;
         case 't':
           test_mode = 1;
+          break;
+        case 'i':
+          insecure_mode = 0L;
           break;
         case 'h':
           help();
@@ -754,9 +761,9 @@ int main(int argc, char **argv)
 
   doh_init(&d);
   if(!test_mode) {
-    initprobe(&probe[0], DNS_TYPE_A, host, url, multi, trace_enabled, headers);
+    initprobe(&probe[0], DNS_TYPE_A, host, url, multi, trace_enabled, headers, insecure_mode);
   }
-  initprobe(&probe[1], DNS_TYPE_AAAA, host, url, multi, trace_enabled, headers);
+  initprobe(&probe[1], DNS_TYPE_AAAA, host, url, multi, trace_enabled, headers, insecure_mode);
 
   /* we start some action by calling perform right away */
   curl_multi_perform(multi, &still_running);

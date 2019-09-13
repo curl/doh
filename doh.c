@@ -234,7 +234,7 @@ static size_t doh_encode(const char *host,
   unsigned char *orig = dnsp;
   const char *hostp = host;
 
-  if(len < (12 + hostlen + 4))
+  if(len <= (12 + hostlen + 4))
     return DOH_TOO_SMALL_BUFFER;
 
   *dnsp++ = 0; /* 16 bit id */

@@ -722,8 +722,7 @@ int main(int argc, char **argv)
   if(argc > 1) {
     char *opts = argv[1];
     if(opts[0] == '-') {
-      do {
-        opts++;
+      while(*++opts) {
         switch(*opts) {
         case 'v':
           trace_enabled = 1;
@@ -735,6 +734,7 @@ int main(int argc, char **argv)
           insecure_mode = 0L;
           break;
         case 'h':
+        default:
           help();
           break;
         }
@@ -744,6 +744,10 @@ int main(int argc, char **argv)
   }
   else
     help();
+
+  if(url_argc>=argc)
+    help();
+
   host = argv[url_argc];
   if(argc > 1 + url_argc)
     url = argv[url_argc + 1];

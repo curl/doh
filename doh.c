@@ -696,7 +696,7 @@ static void help(void)
           "  -h  this help\n"
           "  -t  test mode\n"
           "  -v  verbose mode\n"
-          "  -i  insecure mode - don't validate TLS certificate\n" );
+          "  -k  insecure mode - don't validate TLS certificate\n" );
   exit(1);
 }
 

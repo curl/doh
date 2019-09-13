@@ -18,7 +18,7 @@ Options:
 - `-h` shows help output
 - `-t` enables server test mode
 - `-v` enables verbose mode
-- `-i` enables insecure mode, skipping server certificate validation
+- `-k` enables insecure mode, skipping server certificate validation
 
 ## Examples
 

@@ -738,6 +738,8 @@ int main(int argc, char **argv)
   else
     help();
   host = argv[url_argc];
+  if (host == NULL)
+    help();
   if(argc > 1 + url_argc)
     url = argv[url_argc + 1];
 

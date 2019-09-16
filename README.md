@@ -28,8 +28,8 @@ Options:
     A: 93.184.216.34
     AAAA: 2606:2800:0220:0001:0248:1893:25c8:1946
 
-    $ doh www.yahoo.com https://dns.google.com/experimental
-    www.yahoo.com from https://dns.google.com/experimental
+    $ doh www.yahoo.com https://dns.google/dns-query
+    www.yahoo.com from https://dns.google/dns-query
     TTL: 36 seconds
     A: 87.248.98.8
     A: 87.248.98.7

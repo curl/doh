@@ -51,6 +51,8 @@ typedef enum {
 #include <netinet/in.h>
 #endif
 
+#include "version.h"
+
 #ifdef _WIN32
 #define FMT_SIZE_T "Iu"
 #else
@@ -691,13 +693,20 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
 
 static void help(void)
 {
-  fprintf(stderr,
-          "Usage: doh [options] <host> [URL]\n"
-          "  -h  this help\n"
-          "  -t  test mode\n"
-          "  -v  verbose mode\n"
-          "  -k  insecure mode - don't validate TLS certificate\n" );
+  fputs("Usage: doh [options] <host> [URL]\n"
+        "  -h  this help\n"
+        "  -t  test mode\n"
+        "  -v  verbose mode\n"
+        "  -V  show version\n"
+        "  -k  insecure mode - don't validate TLS certificate\n",
+        stderr);
   exit(1);
+}
+
+static void show_version(void)
+{
+  fputs("doh version " DOH_VERSION_TXT "\n", stdout);
+  exit(0);
 }
 
 int main(int argc, char **argv)
@@ -725,16 +734,19 @@ int main(int argc, char **argv)
     if(opts[0] == '-') {
       while(*++opts) {
         switch(*opts) {
-        case 'v':
+        case 'v': /* verbose */
           trace_enabled = 1;
           break;
-        case 't':
+        case 'V': /* version */
+          show_version();
+          break;
+        case 't': /* test mode */
           test_mode = 1;
           break;
-        case 'k':
+        case 'k': /* insecure */
           insecure_mode = true;
           break;
-        case 'h':
+        case 'h': /* help */
         default:
           help();
           break;

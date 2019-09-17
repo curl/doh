@@ -695,10 +695,10 @@ static void help(void)
 {
   fputs("Usage: doh [options] <host> [URL]\n"
         "  -h  this help\n"
+        "  -k  insecure mode - don't validate TLS certificate\n"
         "  -t  test mode\n"
         "  -v  verbose mode\n"
-        "  -V  show version\n"
-        "  -k  insecure mode - don't validate TLS certificate\n",
+        "  -V  show version\n",
         stderr);
   exit(1);
 }

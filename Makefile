@@ -1,7 +1,7 @@
 TARGET = doh
 OBJS = doh.o
 LDLIBS = `curl-config --libs`
-CFLAGS = -W -Wall -pedantic -g `curl-config --cflags`
+CFLAGS := $(CFLAGS) -W -Wall -pedantic -g `curl-config --cflags`
 
 BINDIR ?= /usr/bin
 

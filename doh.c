@@ -56,7 +56,7 @@ typedef enum {
 #ifdef _WIN32
 #define FMT_SIZE_T "Iu"
 #else
-#define FMT_SIZE_T "zu"
+#define FMT_SIZE_T "lu" /* actually a size_t */
 #endif
 
 #define DNS_CLASS_IN 0x01
@@ -80,7 +80,7 @@ typedef enum {
   DOH_DNS_BAD_RCODE,    /* 8 - no such name */
   DOH_DNS_UNEXPECTED_TYPE,  /* 9 */
   DOH_DNS_UNEXPECTED_CLASS, /* 10 */
-  DOH_NO_CONTENT,           /* 11 */
+  DOH_NO_CONTENT            /* 11 */
 } DOHcode;
 
 struct data {
@@ -665,7 +665,7 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
     curl_easy_setopt(curl, CURLOPT_POSTFIELDS, p->dohbuffer);
     curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, p->dohlen);
     curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2TLS);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2);
     curl_easy_setopt(curl, CURLOPT_PRIVATE, p);
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, insecure_mode?0L:1L);

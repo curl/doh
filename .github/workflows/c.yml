@@ -9,6 +9,8 @@ jobs:
     
     steps:
     - uses: actions/checkout@v1
+    - name install libcurl
+    - run: apt-get install libcurl4-openssl-dev
     - name: make
       run: make
   

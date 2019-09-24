@@ -41,6 +41,7 @@ typedef enum {
 #else
 #include <stdbool.h>
 #endif
+enum iptrans { v4, v6, v46 };
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -67,6 +68,7 @@ typedef enum {
 #define DNS_TYPE_AAAA  28
 
 #define MAX_ADDR 8
+#define MAX_URLS 100
 
 typedef enum {
   DOH_OK,
@@ -86,6 +88,8 @@ typedef enum {
 struct data {
   char trace_ascii; /* 1 or 0 */
 };
+
+const char default_url[] = "https://dns.cloudflare.com/dns-query";
 
 static
 void dump(const char *text,
@@ -620,11 +624,17 @@ struct dnsprobe {
   struct data config;
 };
 
-static int initprobe(struct dnsprobe *p, int dnstype, char *host,
-                     const char *url, CURLM *multi, int trace_enabled,
-                     struct curl_slist *headers, bool insecure_mode)
+static int initprobe(int dnstype, char *host, const char *url, CURLM *multi,
+                     int trace_enabled, struct curl_slist *headers,
+                     bool insecure_mode, enum iptrans transport,
+                     struct curl_slist *resolve)
 {
   CURL *curl;
+  struct dnsprobe *p = calloc((size_t)1, sizeof *p);
+  if(p == NULL) {
+    fprintf(stderr, "Failed to allocate memory\n");
+    return 1;
+  }
   p->dohlen = doh_encode(host, dnstype, p->dohbuffer, sizeof(p->dohbuffer));
   if(!p->dohlen) {
     fprintf(stderr, "Failed to encode DOH packet\n");
@@ -658,6 +668,12 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
       curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &p->config);
       curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
     }
+    if (transport == v4)
+      curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+    else if (transport == v6)
+      curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
+    if (resolve != NULL)
+      curl_easy_setopt(curl, CURLOPT_RESOLVE, resolve);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&p->serverdoh);
@@ -676,8 +692,10 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
     /* add the individual transfers */
     curl_multi_add_handle(multi, curl);
   }
-  else
+  else {
+    fprintf(stderr, "curl_easy_init() failed\n");
     return 3;
+  }
 
   return 0;
 }
@@ -691,15 +709,22 @@ static int initprobe(struct dnsprobe *p, int dnstype, char *host,
   (void)select(0, NULL, NULL, NULL, &wait);
 #endif
 
-static void help(void)
+static void help(const char *msg)
 {
-  fputs("Usage: doh [options] <host> [URL]\n"
+  if(msg != NULL)
+    fprintf(stderr, "%s:\n\n", msg);
+  fprintf(stderr, "Usage: doh [options] <host> [URL]\n"
         "  -h  this help\n"
         "  -k  insecure mode - don't validate TLS certificate\n"
         "  -t  test mode\n"
         "  -v  verbose mode\n"
-        "  -V  show version\n",
-        stderr);
+        "  -4  use only IPv4 transport\n"
+        "  -6  use only IPv6 transport\n"
+        "  -rNAME:PORT:ADDRESS (e.g., example.com:443:127.0.0.1\n"
+        "      (to preload libcurl's DNS cache)\n"
+        "  -V  show version\n"
+        "(default URL is %s)\n",
+        default_url);
   exit(1);
 }
 
@@ -712,13 +737,15 @@ static void show_version(void)
 int main(int argc, char **argv)
 {
   CURLMsg *msg;
-  struct curl_slist *headers;
+  struct curl_slist *headers = NULL;
+  struct curl_slist *resolve = NULL;
+  enum iptrans transport = v46;
   int trace_enabled = 0;
   int test_mode = 0;
   int rc;
-  const char *url = "https://dns.cloudflare.com/dns-query";
+  const char *urls[MAX_URLS];
+  int i, n_urls = 0;
   char *host;
-  struct dnsprobe probe[2];
   CURLM *multi;
   int still_running;
   int repeats = 0;
@@ -726,49 +753,56 @@ int main(int argc, char **argv)
   int successful = 0;
   int exit_status = 0;
   int queued;
-  int url_argc = 1;
   bool insecure_mode = false;
 
-  if(argc > 1) {
-    char *opts = argv[1];
-    if(opts[0] == '-') {
-      while(*++opts) {
-        switch(*opts) {
-        case 'v': /* verbose */
-          trace_enabled = 1;
-          break;
-        case 'V': /* version */
-          show_version();
-          break;
-        case 't': /* test mode */
-          test_mode = 1;
-          break;
-        case 'k': /* insecure */
-          insecure_mode = true;
-          break;
-        case 'h': /* help */
-        default:
-          help();
-          break;
-        }
-      } while(*opts);
-      url_argc++;
+  for(argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
+    switch(argv[0][1]) {
+    case 'v': /* verbose */
+      trace_enabled = 1;
+      break;
+    case 'V': /* version */
+      show_version();
+      break;
+    case 't': /* test mode */
+      test_mode = 1;
+      break;
+    case 'k': /* insecure */
+      insecure_mode = true;
+      break;
+    case '4':
+      transport = v4;
+      break;
+    case '6':
+      transport = v6;
+      break;
+    case 'r':
+      resolve = curl_slist_append(resolve, &argv[0][2]);
+      break;
+    case 'h': /* help */
+      help(NULL);
+      break;
+    default:
+      help("unrecognied option");
+      break;
     }
   }
-  else
-    help();
-
-  if(url_argc>=argc)
-    help();
-
-  host = argv[url_argc];
-  if(argc > 1 + url_argc)
-    url = argv[url_argc + 1];
+  if(argc < 1)
+    help("no lookup name specified");
+  argc--; host = *argv++;
+  while(argc > 0) {
+    if(n_urls == MAX_URLS)
+      help("too many URLs");
+    argc--; urls[n_urls++] = *argv++;
+  }
+  if(n_urls == 0)
+    urls[n_urls++] = default_url;
+  if(n_urls > 1 && !test_mode)
+    help("multiple URLS only permitted in test mode");
 
   curl_global_init(CURL_GLOBAL_ALL);
 
   /* use the older content-type */
-  headers = curl_slist_append(NULL,
+  headers = curl_slist_append(headers,
                               "Content-Type: application/dns-message");
   headers = curl_slist_append(headers,
                               "Accept: application/dns-message");
@@ -777,10 +811,27 @@ int main(int argc, char **argv)
   multi = curl_multi_init();
 
   doh_init(&d);
-  if(!test_mode) {
-    initprobe(&probe[0], DNS_TYPE_A, host, url, multi, trace_enabled, headers, insecure_mode);
+
+  for(i = 0; i < n_urls; i++) {
+    if(transport == v4 || transport == v46) {
+      rc = initprobe(DNS_TYPE_A, host, urls[i], multi,
+                     trace_enabled, headers, insecure_mode,
+                     transport, resolve);
+      if(rc != 0) {
+        fprintf(stderr, "initprobe() failed (v4)\n");
+        exit(1);
+      }
+    }
+    if(transport == v6 || transport == v46) {
+      rc = initprobe(DNS_TYPE_AAAA, host, urls[i], multi,
+                     trace_enabled, headers, insecure_mode,
+                     transport, resolve);
+      if(rc != 0) {
+        fprintf(stderr, "initprobe() failed (v6)\n");
+        exit(1);
+      }
+    }
   }
-  initprobe(&probe[1], DNS_TYPE_AAAA, host, url, multi, trace_enabled, headers, insecure_mode);
 
   /* we start some action by calling perform right away */
   curl_multi_perform(multi, &still_running);
@@ -822,7 +873,8 @@ int main(int argc, char **argv)
 
         /* Check for errors */
         if(msg->data.result != CURLE_OK) {
-          fprintf(stderr, "probe for %s failed: %s\n", type2name(probe->dnstype),
+          fprintf(stderr, "probe for %s failed: %s\n",
+                  type2name(probe->dnstype),
                   curl_easy_strerror(msg->data.result));
           exit_status = 1;
         }
@@ -855,13 +907,14 @@ int main(int argc, char **argv)
         }
         curl_multi_remove_handle(multi, e);
         curl_easy_cleanup(e);
+        free(probe);
       }
     }
-  } while(still_running);
+  } while(still_running && (successful == 0 || test_mode == 0));
 
   if(successful && !test_mode) {
     int i;
-    printf("%s from %s\n", host, url);
+    printf("[%s]\n", host);
     printf("TTL: %u seconds\n", d.ttl);
     for(i=0; i < d.numv4; i++) {
       printf("A: %d.%d.%d.%d\n",
@@ -884,7 +937,10 @@ int main(int argc, char **argv)
   }
 
   doh_cleanup(&d);
-  curl_slist_free_all(headers);
+  if (headers != NULL)
+    curl_slist_free_all(headers);
+  if (resolve != NULL)
+    curl_slist_free_all(resolve);
   curl_multi_cleanup(multi);
 
   /* we're done with libcurl, so clean it up */

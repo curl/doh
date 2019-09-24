@@ -1,0 +1,50 @@
+language: c
+sudo: required
+
+addons:
+    apt:
+        config:
+            retries: true
+        sources: &common_sources
+            - ubuntu-toolchain-r-test
+        packages: &common_packages
+            - gcc-8
+            - valgrind
+
+matrix:
+    include:
+        - os: linux
+          compiler: gcc
+          dist: xenial
+          env: T=normal
+
+        - os: linux
+          compiler: clang
+          dist: xenial
+          env: T=normal
+
+        - os: osx
+          compiler: gcc
+          env: T=normal
+
+        - os: osx
+          compiler: clang
+          env: T=normal
+
+before_install:
+
+install:
+
+before_script:
+
+script:
+    - make
+
+# whitelist branches to avoid testing feature branches twice (as branch and as pull request)
+branches:
+    only:
+        - master
+        - /\/ci$/
+
+notifications:
+  email: false

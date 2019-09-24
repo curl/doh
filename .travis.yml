@@ -15,7 +15,7 @@ matrix:
     include:
         - os: linux
           compiler: gcc
-          dist: trusty
+          dist: xenial
           env: T=normal
 
         - os: linux

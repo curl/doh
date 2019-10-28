@@ -23,7 +23,7 @@
  * Issue a DNS-over-HTTPS name resolve call for A and/or AAAA.
  * Follow CNAMEs. Detect CNAME loops.
  * Collect responses and display them.
- * Timeout slow respones.
+ * Timeout slow responses.
  *
  */
 
@@ -782,7 +782,7 @@ int main(int argc, char **argv)
       help(NULL);
       break;
     default:
-      help("unrecognied option");
+      help("unrecognized option");
       break;
     }
   }

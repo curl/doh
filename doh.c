@@ -54,6 +54,12 @@ enum iptrans { v4, v6, v46 };
 
 #include "version.h"
 
+/* doh-sound related stuff */
+#include "sound/doh-sound.h"
+#include <pthread.h>
+pthread_t sound_thread;
+static int playing = false;
+
 #ifdef _WIN32
 #define FMT_SIZE_T "Iu"
 #else
@@ -716,6 +722,7 @@ static void help(const char *msg)
   fprintf(stderr, "Usage: doh [options] <host> [URL]\n"
         "  -h  this help\n"
         "  -k  insecure mode - don't validate TLS certificate\n"
+	"  -s  play doh sound\n"
         "  -t  test mode\n"
         "  -v  verbose mode\n"
         "  -4  use only IPv4 transport\n"
@@ -780,6 +787,14 @@ int main(int argc, char **argv)
       break;
     case 'h': /* help */
       help(NULL);
+      break;
+    case 's':
+      if (pthread_create(&sound_thread, NULL, play_sound, NULL) != 0) {
+        fprintf(stderr, "playing sound failed\n");
+        playing = false;
+      } else {
+        playing = true;
+      }
       break;
     default:
       help("unrecognied option");
@@ -934,6 +949,10 @@ int main(int argc, char **argv)
     }
     for(i=0; i < d.numcname; i++)
       printf("CNAME: %s\n", d.cname[i].alloc);
+  }
+
+  if (playing) {
+	  pthread_join(sound_thread, NULL);
   }
 
   doh_cleanup(&d);

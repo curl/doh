@@ -1,6 +1,7 @@
 TARGET = doh
-OBJS = doh.o
-LDLIBS = `curl-config --libs`
+OBJS = doh.o sound/doh-sound.o sound/doh-sound.h
+SOUND_LIBS = -lSDL2 -lGL -lpthread
+LDLIBS = `curl-config --libs` $(SOUND_LIBS)
 CFLAGS := $(CFLAGS) -W -Wall -pedantic -g `curl-config --cflags`
 
 BINDIR ?= /usr/bin

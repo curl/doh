@@ -11,7 +11,6 @@ addons:
             - gcc-8
             - valgrind
             - libsdl2-dev
-            - libgl1-mesa-dev
 
 matrix:
     include:
@@ -34,6 +33,13 @@ matrix:
           env: T=normal
 
 before_install:
+    - |
+        travis_retry curl -L https://www.libsdl.org/release/SDL2-2.0.10.tar.gz | tar xz
+        cd SDL2-2.0.10
+        ./configure
+        make
+        sudo make install
+        cd ../
 
 install:
 

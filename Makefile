@@ -1,7 +1,7 @@
 TARGET = doh
 OBJS = doh.o sound/doh-sound.o
-SOUND_LIBS = -lSDL2 -lGL -lpthread
-LDLIBS = `curl-config --libs` $(SOUND_LIBS)
+SOUND_LIBS = -lSDL2 -lpthread
+LDLIBS = $(SOUND_LIBS) `curl-config --libs`
 CFLAGS := $(CFLAGS) -W -Wall -pedantic -g `curl-config --cflags`
 MANUAL = doh.1
 

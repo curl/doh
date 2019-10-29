@@ -18,9 +18,10 @@ servers](https://github.com/curl/curl/wiki/DNS-over-HTTPS#publicly-available-ser
 Options:
 
 - `-h` shows help output
+- `-k` enables insecure mode, skipping server certificate validation
 - `-t` enables server test mode
 - `-v` enables verbose mode
-- `-k` enables insecure mode, skipping server certificate validation
+- `-V` shows the version number and exits
 
 ## Examples
 

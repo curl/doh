@@ -1,5 +1,7 @@
 # doh
 
+[![Build Status](https://travis-ci.org/curl/doh.svg?branch=master)](https://travis-ci.org/curl/doh)
+
  A libcurl-using application that resolves a host name using DNS-over-HTTPS
  (DoH).
 

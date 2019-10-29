@@ -1,5 +1,5 @@
 TARGET = doh
-OBJS = doh.o sound/doh-sound.o sound/doh-sound.h
+OBJS = doh.o sound/doh-sound.o
 SOUND_LIBS = -lSDL2 -lGL -lpthread
 LDLIBS = `curl-config --libs` $(SOUND_LIBS)
 CFLAGS := $(CFLAGS) -W -Wall -pedantic -g `curl-config --cflags`

@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: install libcurl
-      run: sudo apt-get install libcurl4-openssl-dev libgl1-mesa-dev libsdl2-dev
+      run: sudo apt-get install libcurl4-openssl-dev libsdl2-dev
     - name: make
       run: make
   

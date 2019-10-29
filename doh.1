@@ -24,6 +24,15 @@ Test mode. Returns an exit code if there isn't a proper DoH response.
 .IP \-v
 Verbose mode. Shows lots of details from the underlying HTTPS connection and
 transfer.
+.IP \-4
+Use only IPv4 transport
+.IP \-6
+Use only IPv6 transport
+.IP "-r NAME:PORT:ADDRESS"
+Provide a fixed IP address for the given host name + port pair. This option
+can be provided several times. This preloads the DNS cache.
+
+Example: "-r example.com:443:127.0.0.1"
 .IP \-V
 Show version number and exit.
 .SH WWW

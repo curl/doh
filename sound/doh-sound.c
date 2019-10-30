@@ -66,7 +66,7 @@ void *play_sound(void *args)
 
 	// wait until we're done playing
 	while (audio_len > 0) {
-		SDL_Delay(100);
+		SDL_Delay(10);
 	}
 
 	// shut everything down

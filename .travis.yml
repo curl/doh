@@ -47,6 +47,7 @@ before_script:
 
 script:
     - make
+    - make with-sound
 
 # whitelist branches to avoid testing feature branches twice (as branch and as pull request)
 branches:

@@ -15,18 +15,6 @@ If DoH URL is left out, the Cloudflare DoH server will be used. See also [list
 of public
 servers](https://github.com/curl/curl/wiki/DNS-over-HTTPS#publicly-available-servers)
 
-Options:
-
-- `-h` shows help output
-- `-k` enables insecure mode, skipping server certificate validation
-- `-t` enables server test mode
-- `-v` enables verbose mode
-- `-4` use only IPv4 transport
-- `-6` use only IPv6 transport
-- `-rNAME:PORT:ADDRESS` (e.g., example.com:443:127.0.0.1)
-      (to preload libcurl's DNS cache)
-- `-V` shows the version number and exits
-
 ## Examples
 
     $ doh www.example.com

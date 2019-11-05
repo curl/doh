@@ -65,6 +65,7 @@ enum iptrans { v4, v6, v46 };
 #define DNS_TYPE_A     1
 #define DNS_TYPE_NS    2
 #define DNS_TYPE_CNAME 5
+#define DNS_TYPE_TXT   16
 #define DNS_TYPE_AAAA  28
 
 #define MAX_ADDR 8
@@ -388,7 +389,7 @@ static DOHcode store_cname(unsigned char *doh,
     if ((length & 0xc0) == 0xc0) {
       unsigned short newpos;
       /* name pointer, get the new offset (14 bits) */
-      if ((index +1) >= dohlen)
+      if ((index + 1) >= dohlen)
         return DOH_DNS_OUT_OF_RANGE;
 
       /* move to the the new index */
@@ -716,11 +717,13 @@ static void help(const char *msg)
   fprintf(stderr, "Usage: doh [options] <host> [URL]\n"
         "  -h  this help\n"
         "  -k  insecure mode - don't validate TLS certificate\n"
-        "  -t  test mode\n"
+        "  -tTYPE (e.g., TXT, A, AAAA)\n"
+        "      (to specify record type)\n"
+        "  -T  test mode\n"
         "  -v  verbose mode\n"
         "  -4  use only IPv4 transport\n"
         "  -6  use only IPv6 transport\n"
-        "  -rNAME:PORT:ADDRESS (e.g., example.com:443:127.0.0.1\n"
+        "  -rNAME:PORT:ADDRESS (e.g., example.com:443:127.0.0.1)\n"
         "      (to preload libcurl's DNS cache)\n"
         "  -V  show version\n"
         "(default URL is %s)\n",
@@ -753,6 +756,7 @@ int main(int argc, char **argv)
   int successful = 0;
   int exit_status = 0;
   int queued;
+  int query_type = 0; /* 0 default value outputs all supported types */
   bool insecure_mode = false;
 
   for(argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
@@ -763,7 +767,17 @@ int main(int argc, char **argv)
     case 'V': /* version */
       show_version();
       break;
-    case 't': /* test mode */
+    case 't':
+      if(strncmp(&argv[0][2], "AAAA", 4) == 0)
+        query_type = DNS_TYPE_AAAA;
+      else if(strncmp(&argv[0][2], "A", 1) == 0)
+        query_type = DNS_TYPE_A;
+      else if(strncmp(&argv[0][2], "CNAME", 5) == 0)
+        query_type = DNS_TYPE_CNAME;
+      else if(strncmp(&argv[0][2], "TXT", 3) == 0)
+        query_type = DNS_TYPE_TXT;
+      break;
+    case 'T': /* test mode */
       test_mode = 1;
       break;
     case 'k': /* insecure */
@@ -813,7 +827,8 @@ int main(int argc, char **argv)
   doh_init(&d);
 
   for(i = 0; i < n_urls; i++) {
-    if(transport == v4 || transport == v46) {
+    if((transport == v4 || transport == v46) &&
+        (query_type == 0 || query_type == DNS_TYPE_A)) {
       rc = initprobe(DNS_TYPE_A, host, urls[i], multi,
                      trace_enabled, headers, insecure_mode,
                      transport, resolve);
@@ -822,8 +837,19 @@ int main(int argc, char **argv)
         exit(1);
       }
     }
-    if(transport == v6 || transport == v46) {
+    if((transport == v6 || transport == v46) &&
+        (query_type == 0 || query_type == DNS_TYPE_AAAA)) {
       rc = initprobe(DNS_TYPE_AAAA, host, urls[i], multi,
+                     trace_enabled, headers, insecure_mode,
+                     transport, resolve);
+      if(rc != 0) {
+        fprintf(stderr, "initprobe() failed (v6)\n");
+        exit(1);
+      }
+    }
+
+    if(query_type == DNS_TYPE_TXT) {
+      rc = initprobe(DNS_TYPE_TXT, host, urls[i], multi,
                      trace_enabled, headers, insecure_mode,
                      transport, resolve);
       if(rc != 0) {

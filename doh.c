@@ -275,7 +275,7 @@ static size_t doh_encode(const char *host,
     }
     else
       labellen = strlen(hostp);
-    if (labellen > 63)
+    if(labellen > 63)
       /* too long label, error out */
       return DOH_DNS_BAD_LABEL;
     *dnsp++ = (unsigned char)labellen;
@@ -301,19 +301,19 @@ static DOHcode skipqname(unsigned char *doh, size_t dohlen,
 {
   unsigned char length;
   do {
-    if (dohlen < (*indexp + 1))
+    if(dohlen < (*indexp + 1))
       return DOH_DNS_OUT_OF_RANGE;
     length = doh[*indexp];
-    if ((length & 0xc0) == 0xc0) {
+    if((length & 0xc0) == 0xc0) {
       /* name pointer, advance over it and be done */
-      if (dohlen < (*indexp + 2))
+      if(dohlen < (*indexp + 2))
         return DOH_DNS_OUT_OF_RANGE;
       *indexp += 2;
       break;
     }
-    if (length & 0xc0)
+    if(length & 0xc0)
       return DOH_DNS_BAD_LABEL;
-    if (dohlen < (*indexp + 1 + length))
+    if(dohlen < (*indexp + 1 + length))
       return DOH_DNS_OUT_OF_RANGE;
     *indexp += 1 + length;
   } while (length);
@@ -390,13 +390,13 @@ static DOHcode store_cname(unsigned char *doh,
   unsigned int loop = 128; /* a valid DNS name can never loop this much */
   unsigned char length;
   do {
-    if (index >= dohlen)
+    if(index >= dohlen)
       return DOH_DNS_OUT_OF_RANGE;
     length = doh[index];
-    if ((length & 0xc0) == 0xc0) {
+    if((length & 0xc0) == 0xc0) {
       unsigned short newpos;
       /* name pointer, get the new offset (14 bits) */
-      if ((index + 1) >= dohlen)
+      if((index + 1) >= dohlen)
         return DOH_DNS_OUT_OF_RANGE;
 
       /* move to the the new index */
@@ -404,19 +404,19 @@ static DOHcode store_cname(unsigned char *doh,
       index = newpos;
       continue;
     }
-    else if (length & 0xc0)
+    else if(length & 0xc0)
       return DOH_DNS_BAD_LABEL; /* bad input */
     else
       index++;
 
-    if (length) {
+    if(length) {
       DOHcode rc;
-      if (c->len) {
+      if(c->len) {
         rc = cnameappend(c, (unsigned char *)".", 1);
         if(rc)
           return rc;
       }
-      if ((index + length) > dohlen)
+      if((index + length) > dohlen)
         return DOH_DNS_BAD_LABEL;
 
       rc = cnameappend(c, &doh[index], length);
@@ -426,7 +426,7 @@ static DOHcode store_cname(unsigned char *doh,
     }
   } while (length && --loop);
 
-  if (!loop)
+  if(!loop)
     return DOH_DNS_CNAME_LOOP;
   return DOH_OK;
 }
@@ -531,7 +531,7 @@ static DOHcode doh_decode(unsigned char *doh,
     rc = skipqname(doh, dohlen, &index);
     if(rc)
       return rc; /* bad qname */
-    if (dohlen < (index + 4))
+    if(dohlen < (index + 4))
       return DOH_DNS_OUT_OF_RANGE;
     index += 4; /* skip question's type and class */
     qdcount--;
@@ -545,23 +545,23 @@ static DOHcode doh_decode(unsigned char *doh,
     if(rc)
       return rc; /* bad qname */
 
-    if (dohlen < (index + 2))
+    if(dohlen < (index + 2))
       return DOH_DNS_OUT_OF_RANGE;
 
     type = get16bit(doh, index);
-    if ((type != DNS_TYPE_CNAME) && (type != dnstype))
+    if((type != DNS_TYPE_CNAME) && (type != dnstype))
       /* Not the same type as was asked for nor CNAME */
       return DOH_DNS_UNEXPECTED_TYPE;
     index += 2;
 
-    if (dohlen < (index + 2))
+    if(dohlen < (index + 2))
       return DOH_DNS_OUT_OF_RANGE;
     class = get16bit(doh, index);
-    if (DNS_CLASS_IN != class)
+    if(DNS_CLASS_IN != class)
       return DOH_DNS_UNEXPECTED_CLASS; /* unsupported */
     index += 2;
 
-    if (dohlen < (index + 4))
+    if(dohlen < (index + 4))
       return DOH_DNS_OUT_OF_RANGE;
 
     ttl = get32bit(doh, index);
@@ -569,7 +569,7 @@ static DOHcode doh_decode(unsigned char *doh,
       d->ttl = ttl;
     index += 4;
 
-    if (dohlen < (index + 2))
+    if(dohlen < (index + 2))
       return DOH_DNS_OUT_OF_RANGE;
 
     rdlength = get16bit(doh, index);
@@ -590,19 +590,19 @@ static DOHcode doh_decode(unsigned char *doh,
     if(rc)
       return rc; /* bad qname */
 
-    if (dohlen < (index + 8))
+    if(dohlen < (index + 8))
       return DOH_DNS_OUT_OF_RANGE;
 
     index += 2; /* type */
     index += 2; /* class */
     index += 4; /* ttl */
 
-    if (dohlen < (index + 2))
+    if(dohlen < (index + 2))
       return DOH_DNS_OUT_OF_RANGE;
 
     rdlength = get16bit(doh, index);
     index += 2;
-    if (dohlen < (index + rdlength))
+    if(dohlen < (index + rdlength))
       return DOH_DNS_OUT_OF_RANGE;
     index += rdlength;
     nscount--;
@@ -614,7 +614,7 @@ static DOHcode doh_decode(unsigned char *doh,
     if(rc)
       return rc; /* bad qname */
 
-    if (dohlen < (index + 8))
+    if(dohlen < (index + 8))
       return DOH_DNS_OUT_OF_RANGE;
 
     index += 2; /* type */
@@ -623,16 +623,16 @@ static DOHcode doh_decode(unsigned char *doh,
 
     rdlength = get16bit(doh, index);
     index += 2;
-    if (dohlen < (index + rdlength))
+    if(dohlen < (index + rdlength))
       return DOH_DNS_OUT_OF_RANGE;
     index += rdlength;
     arcount--;
   }
 
-  if (index != dohlen)
+  if(index != dohlen)
     return DOH_DNS_MALFORMAT; /* something is wrong */
 
-  if ((type != DNS_TYPE_NS) && !d->numcname && !d->numv6 && !d->numv4 && !d->numtxt)
+  if((type != DNS_TYPE_NS) && !d->numcname && !d->numv6 && !d->numv4 && !d->numtxt)
     /* nothing stored! */
     return DOH_NO_CONTENT;
 
@@ -707,11 +707,11 @@ static int initprobe(int dnstype, char *host, const char *url, CURLM *multi,
       curl_easy_setopt(curl, CURLOPT_DEBUGDATA, &p->config);
       curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
     }
-    if (transport == v4)
+    if(transport == v4)
       curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
-    else if (transport == v6)
+    else if(transport == v6)
       curl_easy_setopt(curl, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V6);
-    if (resolve != NULL)
+    if(resolve != NULL)
       curl_easy_setopt(curl, CURLOPT_RESOLVE, resolve);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_cb);
@@ -1018,9 +1018,9 @@ int main(int argc, char **argv)
   }
 
   doh_cleanup(&d);
-  if (headers != NULL)
+  if(headers != NULL)
     curl_slist_free_all(headers);
-  if (resolve != NULL)
+  if(resolve != NULL)
     curl_slist_free_all(resolve);
   curl_multi_cleanup(multi);
 

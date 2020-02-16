@@ -795,7 +795,6 @@ int main(int argc, char **argv)
   int exit_status = 0;
   int queued;
   int query_type = 0; /* 0 default value outputs A, AAAA, CNAME */
-  int paramlen;
   bool insecure_mode = false;
 
   for(argc--, argv++; argc > 0 && argv[0][0] == '-'; argc--, argv++) {
@@ -807,14 +806,13 @@ int main(int argc, char **argv)
       show_version();
       break;
     case 't':
-      paramlen = strlen(&argv[0][2]);
-      if(strncmp(&argv[0][2], "AAAA", paramlen) == 0)
+      if(!strcmp(&argv[0][2], "AAAA"))
         query_type = DNS_TYPE_AAAA;
-      else if(strncmp(&argv[0][2], "A", paramlen) == 0)
+      else if(!strcmp(&argv[0][2], "A"))
         query_type = DNS_TYPE_A;
-      else if(strncmp(&argv[0][2], "CNAME", paramlen) == 0)
+      else if(!strcmp(&argv[0][2], "CNAME"))
         query_type = DNS_TYPE_CNAME;
-      else if(strncmp(&argv[0][2], "TXT", paramlen) == 0)
+      else if(!strcmp(&argv[0][2], "TXT"))
         query_type = DNS_TYPE_TXT;
       else
         help("type not supported");

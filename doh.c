@@ -217,7 +217,14 @@ struct dnsentry {
 
 static const char *type2name(int dnstype)
 {
-  return (dnstype == 1)?"A":"AAAA";
+  switch(dnstype) {
+  case DNS_TYPE_A: return "A";
+  case DNS_TYPE_NS: return "NS";
+  case DNS_TYPE_CNAME: return "CNAME";
+  case DNS_TYPE_TXT: return "TXT";
+  case DNS_TYPE_AAAA: return "AAAA";
+  }
+  return "Unknown";
 }
 
 static size_t
@@ -371,6 +378,7 @@ static DOHcode cnameappend(struct cnamestore *c,
     ptr = realloc(c->alloc, c->allocsize);
     if(!ptr) {
       free(c->alloc);
+      c->alloc = NULL;
       return DOH_OUT_OF_MEM;
     }
     c->alloc = ptr;
@@ -755,7 +763,7 @@ static void help(const char *msg)
   fprintf(stderr, "Usage: doh [options] <host> [URL]\n"
         "  -h  this help\n"
         "  -k  insecure mode - don't validate TLS certificate\n"
-        "  -tTYPE (e.g., TXT, A, AAAA)\n"
+        "  -tTYPE (e.g., TXT, CNAME, A, AAAA)\n"
         "      (to specify record type)\n"
         "  -T  test mode\n"
         "  -v  verbose mode\n"
@@ -867,43 +875,39 @@ int main(int argc, char **argv)
   doh_init(&d);
 
   for(i = 0; i < n_urls; i++) {
-    if((transport == v4 || transport == v46) &&
-        (query_type == 0 || query_type == DNS_TYPE_A)) {
+    if(query_type == 0 || query_type == DNS_TYPE_A) {
       rc = initprobe(DNS_TYPE_A, host, urls[i], multi,
                      trace_enabled, headers, insecure_mode,
                      transport, resolve);
       if(rc != 0) {
-        fprintf(stderr, "initprobe() failed (v4)\n");
+        fprintf(stderr, "initprobe() failed (DNS_TYPE_A)\n");
         exit(1);
       }
     }
-    if((transport == v6 || transport == v46) &&
-        (query_type == 0 || query_type == DNS_TYPE_AAAA)) {
+    if(query_type == 0 || query_type == DNS_TYPE_AAAA) {
       rc = initprobe(DNS_TYPE_AAAA, host, urls[i], multi,
                      trace_enabled, headers, insecure_mode,
                      transport, resolve);
       if(rc != 0) {
-        fprintf(stderr, "initprobe() failed (v6)\n");
+        fprintf(stderr, "initprobe() failed (DNS_TYPE_AAAA)\n");
         exit(1);
       }
     }
-
     if(query_type == DNS_TYPE_TXT) {
       rc = initprobe(DNS_TYPE_TXT, host, urls[i], multi,
                      trace_enabled, headers, insecure_mode,
                      transport, resolve);
       if(rc != 0) {
-        fprintf(stderr, "initprobe() failed (v6)\n");
+        fprintf(stderr, "initprobe() failed (DNS_TYPE_TXT)\n");
         exit(1);
       }
     }
-
     if(query_type == DNS_TYPE_CNAME) {
       rc = initprobe(DNS_TYPE_CNAME, host, urls[i], multi,
                      trace_enabled, headers, insecure_mode,
                      transport, resolve);
       if(rc != 0) {
-        fprintf(stderr, "initprobe() failed (v6)\n");
+        fprintf(stderr, "initprobe() failed (DNS_TYPE_CNAME)\n");
         exit(1);
       }
     }
@@ -992,27 +996,34 @@ int main(int argc, char **argv)
     int i;
     printf("[%s]\n", host);
     printf("TTL: %u seconds\n", d.ttl);
-    for(i=0; i < d.numv4; i++) {
-      printf("A: %d.%d.%d.%d\n",
-             d.v4addr[i]>>24,
-             (d.v4addr[i]>>16) & 0xff,
-             (d.v4addr[i]>>8) & 0xff,
-             d.v4addr[i] & 0xff);
-    }
-    for(i=0; i < d.numv6; i++) {
-      int j;
-      printf("AAAA: ");
-      for(j=0; j<16; j+=2) {
-        printf("%s%02x%02x", j ? ":" : "", d.v6addr[i].byte[j],
-               d.v6addr[i].byte[j+1]);
+    if(query_type == 0 || query_type == DNS_TYPE_A) {
+      for(i=0; i < d.numv4; i++) {
+        printf("A: %d.%d.%d.%d\n",
+               d.v4addr[i]>>24,
+               (d.v4addr[i]>>16) & 0xff,
+               (d.v4addr[i]>>8) & 0xff,
+               d.v4addr[i] & 0xff);
       }
-      printf("\n");
     }
-    if(query_type == 0 || query_type == DNS_TYPE_CNAME)
+    if(query_type == 0 || query_type == DNS_TYPE_AAAA) {
+      for(i=0; i < d.numv6; i++) {
+        int j;
+        printf("AAAA: ");
+        for(j=0; j<16; j+=2) {
+          printf("%s%02x%02x", j ? ":" : "", d.v6addr[i].byte[j],
+                 d.v6addr[i].byte[j+1]);
+        }
+        printf("\n");
+      }
+    }
+    if(query_type == 0 || query_type == DNS_TYPE_CNAME) {
       for(i=0; i < d.numcname; i++)
         printf("CNAME: %s\n", d.cname[i].alloc);
-    for(i=0; i < d.numtxt; i++)
-      printf("TXT: %s\n", d.txt[i].txt);
+    }
+    if(query_type == 0 || query_type == DNS_TYPE_TXT) {
+      for(i=0; i < d.numtxt; i++)
+        printf("TXT: %s\n", d.txt[i].txt);
+    }
   }
 
   doh_cleanup(&d);

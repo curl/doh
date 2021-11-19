@@ -7,6 +7,12 @@
 
  This code uses POST requests unconditionally for this.
 
+## Install
+
+    make
+    sudo make install
+
+
 ## Usage
 
     doh [options] host [DoH URL]

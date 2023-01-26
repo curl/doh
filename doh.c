@@ -256,7 +256,7 @@ static size_t doh_encode(const char *host,
   const char *hostp = host;
 
   if(len < (12 + hostlen + 6))
-    return DOH_TOO_SMALL_BUFFER;
+    return 0;
 
   *dnsp++ = 0; /* 16 bit id */
   *dnsp++ = 0;
@@ -284,7 +284,7 @@ static size_t doh_encode(const char *host,
       labellen = strlen(hostp);
     if(labellen > 63)
       /* too long label, error out */
-      return DOH_DNS_BAD_LABEL;
+      return 0;
     *dnsp++ = (unsigned char)labellen;
     memcpy(dnsp, hostp, labellen);
     dnsp += labellen;

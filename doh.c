@@ -598,15 +598,12 @@ static DOHcode doh_decode(unsigned char *doh,
     if(rc)
       return rc; /* bad qname */
 
-    if(dohlen < (index + 8))
+    if(dohlen < (index + 10))
       return DOH_DNS_OUT_OF_RANGE;
 
     index += 2; /* type */
     index += 2; /* class */
     index += 4; /* ttl */
-
-    if(dohlen < (index + 2))
-      return DOH_DNS_OUT_OF_RANGE;
 
     rdlength = get16bit(doh, index);
     index += 2;
@@ -622,7 +619,7 @@ static DOHcode doh_decode(unsigned char *doh,
     if(rc)
       return rc; /* bad qname */
 
-    if(dohlen < (index + 8))
+    if(dohlen < (index + 10))
       return DOH_DNS_OUT_OF_RANGE;
 
     index += 2; /* type */

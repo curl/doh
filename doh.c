@@ -995,7 +995,7 @@ int main(int argc, char **argv)
   if(successful && !test_mode) {
     int i;
     printf("[%s]\n", host);
-    printf("TTL: %u seconds\n", d.ttl);
+    printf("TTL: %u milliseconds\n", d.ttl);
     if(query_type == 0 || query_type == DNS_TYPE_A) {
       for(i=0; i < d.numv4; i++) {
         printf("A: %d.%d.%d.%d\n",

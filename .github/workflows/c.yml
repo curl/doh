@@ -1,6 +1,6 @@
 name: Ubuntu
 
-on: [push]
+'on': [push]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}

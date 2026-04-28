@@ -2,15 +2,21 @@ name: Ubuntu
 
 on: [push]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: true
+
+permissions: {}
+
 jobs:
   build:
-
+    name: 'build'
     runs-on: ubuntu-latest
-    
     steps:
-    - uses: actions/checkout@v1
-    - name: install libcurl
-      run: sudo apt-get install libcurl4-openssl-dev
-    - name: make
-      run: make
-  
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: install libcurl
+        run: sudo apt-get install libcurl4-openssl-dev
+      - name: make
+        run: make
